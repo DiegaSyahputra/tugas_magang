@@ -202,7 +202,13 @@ class StudentController extends Controller
     {
         try {
             $student = Student::findOrFail($id);
-            $student->delete();
+            DB::transaction(function () use ($student) {
+                $user = $student->user;
+                $student->delete();
+                if ($user) {
+                    $user->delete();
+                }
+            });
 
             return redirect()->route('students.index')->with([
                 'status' => 'success',
@@ -217,7 +223,7 @@ class StudentController extends Controller
 
             return redirect()->back()->withInput()->with([
                 'status' => 'error',
-                'message' => 'Terjadi kesalahan saat menghapus data: ' . $e->getMessage()
+                'message' => 'Terjadi kesalahan sistem saat menghapus data siswa.'
             ]);
         }
     }

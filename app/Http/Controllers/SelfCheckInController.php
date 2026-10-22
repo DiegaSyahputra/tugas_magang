@@ -34,22 +34,40 @@ class SelfCheckInController extends Controller
             return back()->withErrors(['student_id' => 'Anda tidak terdaftar di kelas ini, tidak bisa check-in.']);
         }
 
+        // Pastikan presensi mandiri dilakukan pada tanggal pelaksanaan sesi
+        $sessionDate = $session->session_date->format('Y-m-d');
+        if (now()->format('Y-m-d') !== $sessionDate) {
+            return back()->withErrors(['student_id' => 'Presensi mandiri hanya dapat dilakukan pada tanggal pelaksanaan sesi.']);
+        }
+
         // Tentukan present vs late otomatis berdasarkan toleransi waktu
         $deadline = Carbon::parse($session->session_date->format('Y-m-d') . ' ' . $session->start_time)
             ->addMinutes(config('attendance.late_tolerance_minutes', 15));
 
-        $status = now()->greaterThan($deadline) ? 'late' : 'present';
+        $existing = AttendanceRecord::where('student_id', $data['student_id'])
+            ->where('course_session_id', $session->id)
+            ->first();
 
-        AttendanceRecord::updateOrCreate(
-            [
+        // Jika sudah tercatat 'present', jangan downgrade menjadi 'late' saat re-check-in
+        if ($existing && $existing->status === 'present') {
+            $status = 'present';
+        } else {
+            $status = now()->greaterThan($deadline) ? 'late' : 'present';
+        }
+
+        if ($existing) {
+            $existing->update([
+                'status' => $status,
+                'checked_in_at' => $existing->checked_in_at ?? now(),
+            ]);
+        } else {
+            AttendanceRecord::create([
                 'student_id' => $data['student_id'],
                 'course_session_id' => $session->id,
-            ],
-            [
                 'status' => $status,
                 'checked_in_at' => now(),
-            ]
-        );
+            ]);
+        }
         // AttendanceRecordObserver otomatis menghitung ulang attendance_percent siswa ini.
 
         $student = $session->course->students()->find($data['student_id']);

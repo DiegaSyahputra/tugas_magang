@@ -32,6 +32,8 @@ class AttendanceRecordController extends Controller
         // Hanya siswa yang benar-benar terdaftar di course sesi ini yang boleh diproses
         $enrolledStudentIds = $session->course->students()->pluck('students.id')->all();
 
+        $processedStudentIds = [];
+
         foreach ($data['attendance'] as $studentId => $status) {
             if (! in_array((int) $studentId, $enrolledStudentIds, true)) {
                 continue;
@@ -53,9 +55,11 @@ class AttendanceRecordController extends Controller
             $processedStudentIds[] = $studentId;
         }
 
-        Student::whereIn('id', $processedStudentIds)
-        ->get()
-        ->each->recalculateAttendance();
+        if (! empty($processedStudentIds)) {
+            Student::whereIn('id', $processedStudentIds)
+                ->get()
+                ->each->recalculateAttendance();
+        }
 
         // recalculateAttendance() pada tiap siswa terpicu otomatis lewat Observer
         // saat AttendanceRecord di atas disimpan (event "saved").

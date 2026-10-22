@@ -48,7 +48,7 @@ class Meeting extends Model
 
     public function messages()
     {
-        return $this->hasMany(MeetingMessage::class)->latest();
+        return $this->hasMany(MeetingMessage::class);
     }
 
     // Peserta = siswa yang terdaftar di course terkait meeting ini

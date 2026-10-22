@@ -55,36 +55,51 @@ class AuthController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
-            'role' => ['required', 'in:admin,teacher,student'],
+            'role' => ['required', 'in:student,teacher'],
             'tel' => ['nullable', 'string', 'max:15'],
         ]);
 
-        $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'password' => Hash::make($request->password),
-            'role' => $request->role,
-        ]);
+        $user = \Illuminate\Support\Facades\DB::transaction(function () use ($request) {
+            $user = User::create([
+                'name' => $request->name,
+                'email' => $request->email,
+                'password' => Hash::make($request->password),
+                'role' => $request->role,
+            ]);
 
-        // Auto-create Student/Teacher record if role is student/teacher
-        if ($request->role === 'student') {
-            $lastCodeNum = Student::count() + 10;
-            Student::create([
-                'name' => $user->name,
-                'user_id' => $user->id,
-                'student_code' => 'STU-' . str_pad($lastCodeNum, 6, '0', STR_PAD_LEFT),
-                'date_birth' => now()->subYears(20)->format('Y-m-d'),
-                'tel' => $request->tel ?? '08123456789',
-                'status' => 'regular',
-            ]);
-        } elseif ($request->role === 'teacher') {
-            Teacher::create([
-                'name' => $user->name,
-                'user_id' => $user->id,
-                'specialization' => 'General Lecturer',
-                'tel' => $request->tel ?? '081298765432',
-            ]);
-        }
+            // Auto-create Student/Teacher record if role is student/teacher
+            if ($request->role === 'student') {
+                $codePrefix = 'STU-';
+                $lastCode = Student::where('student_code', 'like', $codePrefix . '%')
+                    ->orderBy('student_code', 'desc')
+                    ->first();
+
+                if ($lastCode) {
+                    $lastNumber = (int) substr($lastCode->student_code, strlen($codePrefix));
+                    $newNumber = str_pad($lastNumber + 1, 6, '0', STR_PAD_LEFT);
+                } else {
+                    $newNumber = '000001';
+                }
+
+                Student::create([
+                    'name' => $user->name,
+                    'user_id' => $user->id,
+                    'student_code' => $codePrefix . $newNumber,
+                    'date_birth' => now()->subYears(20)->format('Y-m-d'),
+                    'tel' => $request->tel ?? '08123456789',
+                    'status' => 'regular',
+                ]);
+            } elseif ($request->role === 'teacher') {
+                Teacher::create([
+                    'name' => $user->name,
+                    'user_id' => $user->id,
+                    'specialization' => 'General Lecturer',
+                    'tel' => $request->tel ?? '081298765432',
+                ]);
+            }
+
+            return $user;
+        });
 
         Auth::login($user);
 

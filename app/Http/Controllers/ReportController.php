@@ -41,6 +41,7 @@ class ReportController extends Controller
         $totalRevenue = Payment::where('status', 'paid')->sum('amount');
         $dateStr = date('d M Y, H:i');
 
+        $userName = e(auth()->user()->name ?? 'Admin');
         $htmlContent = "
         <!DOCTYPE html>
         <html>
@@ -61,7 +62,7 @@ class ReportController extends Controller
         <body>
             <div class='header'>
                 <div class='title'>Laporan Akademik & Performa Platform SkillSet</div>
-                <p>Tanggal Ekspor: {$dateStr} &middot; Pengunduh: " . (auth()->user()->name ?? 'Admin') . "</p>
+                <p>Tanggal Ekspor: {$dateStr} &middot; Pengunduh: {$userName}</p>
             </div>
 
             <h3>Ringkasan Performa Per Kelas</h3>
@@ -72,7 +73,9 @@ class ReportController extends Controller
                 <tbody>";
 
         foreach ($courses as $c) {
-            $htmlContent .= "<tr><td>{$c->code}</td><td>{$c->name}</td><td>{$c->students_count} Siswa</td><td>{$c->sessions_count} Sesi</td></tr>";
+            $courseCode = e($c->code);
+            $courseName = e($c->name);
+            $htmlContent .= "<tr><td>{$courseCode}</td><td>{$courseName}</td><td>{$c->students_count} Siswa</td><td>{$c->sessions_count} Sesi</td></tr>";
         }
 
         $htmlContent .= "
@@ -87,7 +90,10 @@ class ReportController extends Controller
                 <tbody>";
 
         foreach ($students as $s) {
-            $htmlContent .= "<tr><td>{$s->student_code}</td><td>{$s->name}</td><td>" . strtoupper($s->status) . "</td><td>{$s->attendance_percent}%</td></tr>";
+            $studentCode = e($s->student_code);
+            $studentName = e($s->name);
+            $studentStatus = e(strtoupper($s->status));
+            $htmlContent .= "<tr><td>{$studentCode}</td><td>{$studentName}</td><td>{$studentStatus}</td><td>{$s->attendance_percent}%</td></tr>";
         }
 
         $htmlContent .= "

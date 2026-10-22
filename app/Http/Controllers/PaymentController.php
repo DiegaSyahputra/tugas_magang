@@ -14,6 +14,16 @@ class PaymentController extends Controller
     {
         $query = Payment::with(['student', 'course'])->latest();
 
+        $user = auth()->user();
+        if ($user && $user->role === 'student') {
+            $studentProfile = Student::where('user_id', $user->id)->first();
+            if ($studentProfile) {
+                $query->where('student_id', $studentProfile->id);
+            } else {
+                $query->whereRaw('1 = 0');
+            }
+        }
+
         if ($request->filled('status') && $request->status !== 'all') {
             $query->where('status', $request->status);
         }
@@ -48,14 +58,21 @@ class PaymentController extends Controller
 
     public function store(Request $request)
     {
+        $user = auth()->user();
+        if ($user && $user->role === 'student') {
+            $studentProfile = Student::where('user_id', $user->id)->firstOrFail();
+            $request->merge(['student_id' => $studentProfile->id]);
+        }
+
         $request->validate([
             'student_id' => 'required|exists:students,id',
             'course_id' => 'nullable|exists:courses,id',
-            'amount' => 'required|numeric|min:0',
+            'amount' => 'required|numeric|min:1000|max:99999999.99',
             'payment_method' => 'required|string|max:100',
         ]);
 
-        $invoiceId = 'INV-' . date('Ymd') . '-' . str_pad(Payment::count() + 1, 3, '0', STR_PAD_LEFT);
+        $maxId = Payment::max('id') ?? 0;
+        $invoiceId = 'INV-' . date('Ymd') . '-' . str_pad($maxId + 1, 4, '0', STR_PAD_LEFT);
 
         Payment::create([
             'invoice_id' => $invoiceId,
@@ -71,6 +88,13 @@ class PaymentController extends Controller
 
     public function uploadProof(Request $request, Payment $payment)
     {
+        if (auth()->user()->role === 'student') {
+            $studentProfile = Student::where('user_id', auth()->id())->first();
+            abort_if(! $studentProfile || $payment->student_id !== $studentProfile->id, 403, 'Akses ditolak: Anda hanya dapat mengunggah bukti pembayaran Anda sendiri.');
+        }
+
+        abort_if($payment->status === 'paid', 422, 'Pembayaran ini sudah berstatus lunas.');
+
         $request->validate([
             'proof_file' => 'required|file|mimes:jpg,jpeg,png,pdf|max:5120', // Max 5MB
         ]);
@@ -91,10 +115,17 @@ class PaymentController extends Controller
 
     public function exportInvoice(Payment $payment)
     {
+        if (auth()->user()->role === 'student') {
+            $studentProfile = Student::where('user_id', auth()->id())->first();
+            abort_if(! $studentProfile || $payment->student_id !== $studentProfile->id, 403, 'Akses ditolak: Anda hanya dapat mengunduh invoice Anda sendiri.');
+        }
+
         $filename = 'invoices/Invoice-' . $payment->invoice_id . '.html';
         
-        $studentName = $payment->student->name ?? 'Siswa';
-        $courseName = $payment->course->name ?? 'Course Fee';
+        $studentName = e($payment->student->name ?? 'Siswa');
+        $courseName = e($payment->course->name ?? 'Course Fee');
+        $paymentMethod = e($payment->payment_method);
+        $invoiceId = e($payment->invoice_id);
         $amountFormatted = number_format($payment->amount, 0, ',', '.');
         $dateFormatted = optional($payment->paid_at ?? $payment->created_at)->format('d M Y, H:i');
 
@@ -103,7 +134,7 @@ class PaymentController extends Controller
         <html>
         <head>
             <meta charset='utf-8'>
-            <title>Struk Invoice - {$payment->invoice_id}</title>
+            <title>Struk Invoice - {$invoiceId}</title>
             <style>
                 body { font-family: sans-serif; padding: 30px; color: #1e293b; line-height: 1.6; }
                 .header { border-bottom: 2px solid #6366f1; padding-bottom: 15px; margin-bottom: 20px; }
@@ -118,11 +149,11 @@ class PaymentController extends Controller
         <body>
             <div class='header'>
                 <div class='title'>SkillSet Academy - Invoice Struk Resmi</div>
-                <p>Invoice ID: <strong>{$payment->invoice_id}</strong> &middot; Tanggal: {$dateFormatted}</p>
+                <p>Invoice ID: <strong>{$invoiceId}</strong> &middot; Tanggal: {$dateFormatted}</p>
             </div>
             <div class='details'>
                 <p><strong>Nama Siswa:</strong> {$studentName}</p>
-                <p><strong>Metode Pembayaran:</strong> {$payment->payment_method}</p>
+                <p><strong>Metode Pembayaran:</strong> {$paymentMethod}</p>
                 <p><strong>Status:</strong> <span style='color:green;font-weight:bold;'>".strtoupper($payment->status)."</span></p>
             </div>
             <table class='table'>

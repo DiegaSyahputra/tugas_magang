@@ -45,7 +45,7 @@ class MasterStudent extends FormRequest
                 'max:50',
                 Rule::unique('students', 'student_code')->ignore($id)
             ],
-            'email'              => ['required','max:100',Rule::unique('users', 'email')->ignore($userId)],
+            'email'              => ['required', 'email', 'max:100', Rule::unique('users', 'email')->ignore($userId)],
             'date_birth'         => ['required', 'date'],
             'tel'                => ['required', 'string', 'max:15', 'regex:/^[0-9+\-\s]+$/'],
             'status'             => ['required', Rule::in(['regular', 'irregular'])],

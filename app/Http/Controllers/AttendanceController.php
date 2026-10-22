@@ -55,9 +55,19 @@ class AttendanceController extends Controller
 
     public function destroy(Student $student)
     {
-        $student->delete();
+        try {
+            \Illuminate\Support\Facades\DB::transaction(function () use ($student) {
+                $student->attendanceRecords()->delete();
+                $student->update([
+                    'attendance_percent' => 0,
+                    'status' => 'irregular',
+                ]);
+            });
 
-        return back()->with('success', 'Data siswa berhasil dihapus.');
+            return back()->with('success', 'Riwayat presensi siswa berhasil dihapus.');
+        } catch (\Exception $e) {
+            return back()->with('error', 'Gagal menghapus riwayat presensi siswa.');
+        }
     }
 
     // Detail riwayat & tren kehadiran satu siswa

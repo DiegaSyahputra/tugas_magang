@@ -37,11 +37,15 @@ class CourseSessionController extends Controller
 
     public function edit(Course $course, CourseSession $session)
     {
+        abort_if($session->course_id !== $course->id, 404);
+
         return view('courses.sessions.edit', compact('course', 'session'));
     }
 
     public function update(Request $request, Course $course, CourseSession $session)
     {
+        abort_if($session->course_id !== $course->id, 404);
+
         $data = $request->validate([
             'title' => ['required', 'string', 'max:255'],
             'session_date' => ['required', 'date'],
@@ -58,16 +62,14 @@ class CourseSessionController extends Controller
 
     public function destroy(Course $course, CourseSession $session)
     {
+        abort_if($session->course_id !== $course->id, 404);
+
         // Menghapus sesi otomatis menghapus attendance_records terkait (cascade),
         // dan attendance_percent siswa yang terdampak akan terhitung ulang
         // lewat AttendanceRecordObserver (event "deleted") untuk tiap record yang hilang.
-        $affectedStudentIds = $session->attendanceRecords()->pluck('student_id');
-
         $session->delete();
 
-        Student::whereIn('id', $affectedStudentIds)
-            ->get()
-            ->each->recalculateAttendance();
+        $course->students->each->recalculateAttendance();
 
         return redirect()
             ->route('courses.show', $course)
@@ -77,6 +79,8 @@ class CourseSessionController extends Controller
     // Tampilkan link & QR code self check-in untuk sesi ini (untuk ditunjukkan/diprint di kelas)
     public function checkinInfo(Course $course, CourseSession $session)
     {
+        abort_if($session->course_id !== $course->id, 404);
+
         return view('courses.sessions.checkin-info', compact('course', 'session'));
     }
 }

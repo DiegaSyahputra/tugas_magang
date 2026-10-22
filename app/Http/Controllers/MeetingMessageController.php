@@ -29,6 +29,7 @@ class MeetingMessageController extends Controller
     {
         $messages = $meeting->messages()
             ->oldest()
+            ->orderBy('id', 'asc')
             ->get(['id', 'sender_name', 'message', 'created_at']);
 
         return response()->json($messages);

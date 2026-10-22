@@ -6,6 +6,7 @@ use App\Models\AttendanceRecord;
 use App\Models\Course;
 use App\Models\CourseSession;
 use App\Models\Meeting;
+use App\Models\Student;
 use Illuminate\Http\Request;
 
 class LiveClassController extends Controller
@@ -97,28 +98,62 @@ class LiveClassController extends Controller
     // Dipanggil otomatis via JS saat siswa join video call (event videoConferenceJoined)
     public function checkIn(Request $request, Meeting $meeting)
     {
+        $user = auth()->user();
+        if ($user && $user->role === 'student') {
+            $studentProfile = Student::where('user_id', $user->id)->first();
+            if (! $studentProfile || (int) $request->student_id !== (int) $studentProfile->id) {
+                return response()->json(['recorded' => false, 'reason' => 'forbidden_student_id'], 403);
+            }
+        }
+
         $data = $request->validate([
             'student_id' => ['required', 'exists:students,id'],
         ]);
 
         if (! $meeting->course_session_id) {
-            // Meeting ini tidak terhubung ke sesi kelas manapun,
-            // jadi tidak ada AttendanceRecord yang bisa diisi otomatis.
             return response()->json(['recorded' => false, 'reason' => 'no_session']);
         }
 
-        AttendanceRecord::updateOrCreate(
-            [
+        // Pastikan siswa terdaftar di course meeting ini
+        $isEnrolled = $meeting->course->students()->where('students.id', $data['student_id'])->exists();
+        if (! $isEnrolled) {
+            return response()->json(['recorded' => false, 'reason' => 'not_enrolled']);
+        }
+
+        $record = AttendanceRecord::where('student_id', $data['student_id'])
+            ->where('course_session_id', $meeting->course_session_id)
+            ->first();
+
+        // Tentukan status kehadiran siswa
+        $status = 'present';
+        if ($meeting->session && $meeting->session->start_time) {
+            $sessionStart = \Carbon\Carbon::parse($meeting->session->session_date->format('Y-m-d') . ' ' . $meeting->session->start_time);
+            $deadline = $sessionStart->addMinutes(config('attendance.late_tolerance_minutes', 15));
+            if (now()->greaterThan($deadline)) {
+                $status = 'late';
+            }
+        }
+
+        if ($record) {
+            $updateData = [];
+            if (! $record->checked_in_at) {
+                $updateData['checked_in_at'] = now();
+            }
+            // Jika sebelumnya di-set 'absent', sekarang bergabung di video call, angkat statusnya
+            if ($record->status === 'absent') {
+                $updateData['status'] = $status;
+            }
+            if (! empty($updateData)) {
+                $record->update($updateData);
+            }
+        } else {
+            AttendanceRecord::create([
                 'student_id' => $data['student_id'],
                 'course_session_id' => $meeting->course_session_id,
-            ],
-            [
-                'status' => 'present',
+                'status' => $status,
                 'checked_in_at' => now(),
-            ]
-        );
-        // AttendanceRecordObserver otomatis menghitung ulang attendance_percent
-        // siswa ini begitu record di atas disimpan.
+            ]);
+        }
 
         return response()->json(['recorded' => true]);
     }
@@ -126,6 +161,14 @@ class LiveClassController extends Controller
     // Dipanggil otomatis via JS saat siswa keluar video call (event videoConferenceLeft)
     public function checkOut(Request $request, Meeting $meeting)
     {
+        $user = auth()->user();
+        if ($user && $user->role === 'student') {
+            $studentProfile = Student::where('user_id', $user->id)->first();
+            if (! $studentProfile || (int) $request->student_id !== (int) $studentProfile->id) {
+                return response()->json(['recorded' => false, 'reason' => 'forbidden_student_id'], 403);
+            }
+        }
+
         $data = $request->validate([
             'student_id' => ['required', 'exists:students,id'],
         ]);
@@ -140,7 +183,7 @@ class LiveClassController extends Controller
 
         if ($record && $record->checked_in_at) {
             $record->update([
-                'duration_minutes' => now()->diffInMinutes($record->checked_in_at),
+                'duration_minutes' => (int) round(abs(now()->diffInMinutes($record->checked_in_at))),
             ]);
         }
 

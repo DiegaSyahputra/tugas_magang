@@ -42,11 +42,11 @@ Route::middleware(['auth'])->group(function () {
 
     // Courses
     Route::get('/courses', [CourseController::class, 'index'])->name('courses.index');
-    Route::get('/courses/{course}', [CourseController::class, 'show'])->name('courses.show');
+    Route::get('/courses/{course}', [CourseController::class, 'show'])->name('courses.show')->whereNumber('course');
 
     // Live Class
     Route::get('/live-class', [LiveClassController::class, 'index'])->name('live-class.index');
-    Route::get('/live-class/{meeting}', [LiveClassController::class, 'show'])->name('live-class.show');
+    Route::get('/live-class/{meeting}', [LiveClassController::class, 'show'])->name('live-class.show')->whereNumber('meeting');
     Route::post('/live-class/{meeting}/check-in', [LiveClassController::class, 'checkIn'])->name('live-class.check-in');
     Route::post('/live-class/{meeting}/check-out', [LiveClassController::class, 'checkOut'])->name('live-class.check-out');
     Route::get('/live-class/{meeting}/messages', [MeetingMessageController::class, 'index'])->name('live-class.messages.index');

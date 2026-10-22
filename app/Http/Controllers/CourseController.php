@@ -52,7 +52,7 @@ class CourseController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'categories' => ['nullable', 'string', 'max:255'],
+            'categories' => ['required', 'string', 'max:255'],
             'code' => ['required', 'string', 'max:50', 'unique:courses,code'],
             'teacher_id' => ['nullable', 'exists:teachers,id'],
         ]);
